@@ -1,4 +1,5 @@
 import { Link, useLocation, useNavigate } from "react-router-dom";
+import { useAuth } from "@/contexts/AuthContext";
 import { cn } from "@/lib/utils";
 import {
   SquaresFour,
@@ -60,8 +61,10 @@ function SidebarContent({
   const location = useLocation();
   const navigate = useNavigate();
   const { theme, setTheme } = useTheme();
+  const { signOut } = useAuth();
 
   const handleSignOut = () => {
+    signOut();
     toast.success("Signed out successfully");
     navigate("/");
     onNavigate?.();

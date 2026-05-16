@@ -1,108 +1,113 @@
 import { createContext, useContext, useState, useEffect, ReactNode } from "react";
-import { User, Session } from "@supabase/supabase-js";
-import { supabase } from "@/integrations/supabase/client";
+import { api } from "@/lib/api";
+
+interface UserProfile {
+  user_id: string;
+  full_name: string;
+  email: string;
+  avatar_url: string | null;
+  is_verified: boolean;
+  created_at: string;
+  updated_at: string;
+}
 
 interface AuthContextType {
-  user: User | null;
-  session: Session | null;
+  user: UserProfile | null;
+  token: string | null;
   loading: boolean;
-  signIn: (email: string, password: string) => Promise<{ error: Error | null }>;
-  signUp: (email: string, password: string, fullName?: string) => Promise<{ error: Error | null }>;
-  signOut: () => Promise<void>;
-  isAdmin: boolean;
+  signIn: (email: string, password: string) => Promise<{ error: string | null; unverified?: boolean }>;
+  signUp: (email: string, password: string, fullName: string) => Promise<{ error: string | null }>;
+  verifyOtp: (email: string, otp: string) => Promise<{ error: string | null }>;
+  resendOtp: (email: string) => Promise<{ error: string | null }>;
+  forgotPassword: (email: string) => Promise<{ error: string | null }>;
+  resetPassword: (email: string, otp: string, newPassword: string) => Promise<{ error: string | null }>;
+  signOut: () => void;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [user, setUser] = useState<User | null>(null);
-  const [session, setSession] = useState<Session | null>(null);
+  const [user, setUser] = useState<UserProfile | null>(null);
+  const [token, setToken] = useState<string | null>(() => localStorage.getItem("questify-token"));
   const [loading, setLoading] = useState(true);
-  const [isAdmin, setIsAdmin] = useState(false);
 
+  // On mount, if token exists fetch profile to hydrate user
   useEffect(() => {
-    // Set up auth state listener FIRST
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      (event, session) => {
-        setSession(session);
-        setUser(session?.user ?? null);
-        setLoading(false);
-
-        // Defer admin check
-        if (session?.user) {
-          setTimeout(() => {
-            checkAdminStatus(session.user.id);
-          }, 0);
-        } else {
-          setIsAdmin(false);
-        }
-      }
-    );
-
-    // THEN check for existing session
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setSession(session);
-      setUser(session?.user ?? null);
+    if (!token) {
       setLoading(false);
-      
-      if (session?.user) {
-        checkAdminStatus(session.user.id);
-      }
+      return;
+    }
+    api.get<UserProfile>("/auth/user/profile").then((res) => {
+      if (res.success) setUser(res.data);
+      else clearAuth();
+      setLoading(false);
+    }).catch(() => {
+      clearAuth();
+      setLoading(false);
     });
-
-    return () => subscription.unsubscribe();
   }, []);
 
-  const checkAdminStatus = async (userId: string) => {
-    const { data, error } = await supabase
-      .from('user_roles')
-      .select('role')
-      .eq('user_id', userId)
-      .eq('role', 'admin')
-      .maybeSingle();
-    
-    if (!error && data) {
-      setIsAdmin(true);
-    }
-  };
+  function clearAuth() {
+    localStorage.removeItem("questify-token");
+    setToken(null);
+    setUser(null);
+  }
+
+  function saveToken(t: string) {
+    localStorage.setItem("questify-token", t);
+    setToken(t);
+  }
 
   const signIn = async (email: string, password: string) => {
-    const { error } = await supabase.auth.signInWithPassword({ email, password });
-    return { error };
+    const res = await api.post<{ access_token: string; token_type: string }>(
+      "/auth/login",
+      { email, password }
+    );
+    if (!res.success) {
+      const unverified = res.message.toLowerCase().includes("not verified");
+      return { error: res.message, unverified };
+    }
+    saveToken(res.data.access_token);
+    // Fetch profile
+    const profile = await api.get<UserProfile>("/auth/user/profile");
+    if (profile.success) setUser(profile.data);
+    return { error: null };
   };
 
-  const signUp = async (email: string, password: string, fullName?: string) => {
-    const redirectUrl = `${window.location.origin}/`;
-    
-    const { error } = await supabase.auth.signUp({
-      email,
-      password,
-      options: {
-        emailRedirectTo: redirectUrl,
-        data: {
-          full_name: fullName,
-        },
-      },
-    });
-    return { error };
+  const signUp = async (email: string, password: string, fullName: string) => {
+    const res = await api.post("/auth/register", { email, password, full_name: fullName });
+    return { error: res.success ? null : res.message };
   };
 
-  const signOut = async () => {
-    await supabase.auth.signOut();
-    setUser(null);
-    setSession(null);
-    setIsAdmin(false);
+  const verifyOtp = async (email: string, otp: string) => {
+    const res = await api.post("/auth/verify", { email, otp });
+    return { error: res.success ? null : res.message };
+  };
+
+  const resendOtp = async (email: string) => {
+    const res = await api.post("/auth/resend-otp", { email });
+    return { error: res.success ? null : res.message };
+  };
+
+  const forgotPassword = async (email: string) => {
+    const res = await api.post("/auth/forgot-password", { email });
+    return { error: res.success ? null : res.message };
+  };
+
+  const resetPassword = async (email: string, otp: string, newPassword: string) => {
+    const res = await api.post("/auth/reset-password", { email, otp, new_password: newPassword });
+    return { error: res.success ? null : res.message };
+  };
+
+  const signOut = () => {
+    clearAuth();
   };
 
   return (
     <AuthContext.Provider value={{
-      user,
-      session,
-      loading,
-      signIn,
-      signUp,
-      signOut,
-      isAdmin,
+      user, token, loading,
+      signIn, signUp, verifyOtp, resendOtp,
+      forgotPassword, resetPassword, signOut,
     }}>
       {children}
     </AuthContext.Provider>
@@ -110,9 +115,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 }
 
 export function useAuth() {
-  const context = useContext(AuthContext);
-  if (!context) {
-    throw new Error("useAuth must be used within an AuthProvider");
-  }
-  return context;
+  const ctx = useContext(AuthContext);
+  if (!ctx) throw new Error("useAuth must be used within an AuthProvider");
+  return ctx;
 }
