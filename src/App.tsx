@@ -26,6 +26,7 @@ import QuestyChat from "./pages/QuestyChat";
 import AdminDashboard from "./pages/AdminDashboard";
 import NotFound from "./pages/NotFound";
 import ExamRoomPage from "./pages/ExamRoomPage";
+import ExamResultPage from "./pages/ExamResultPage";
 
 const queryClient = new QueryClient();
 
@@ -48,6 +49,7 @@ const App = () => (
                     <Route path="/upload" element={<Upload />} />
                     <Route path="/exam" element={<Exam />} />
                     <Route path="/exam-room" element={<ExamRoomPage />} />
+                    <Route path="/exam-result" element={<ExamResultPage />} />
                     <Route path="/notes" element={<Notes />} />
                     <Route path="/study-room" element={<StudyRoom />} />
                     <Route path="/planner" element={<Planner />} />

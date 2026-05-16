@@ -53,16 +53,16 @@ function QuestionCard({
 
         <p className="font-medium text-base leading-relaxed">{question.question_text}</p>
 
-        {/* Multiple Choice */}
+        {/* Multiple Choice — store 0-based index string */}
         {question.question_type === "Multiple Choice" && content.options && (
           <div className="space-y-2">
             {(content.options as string[]).map((opt, i) => (
               <button
                 key={i}
-                onClick={() => onChange(opt)}
+                onClick={() => onChange(String(i))}
                 className={cn(
                   "w-full text-left p-3 rounded-lg border text-sm transition-all",
-                  answer === opt ? "border-primary bg-primary/5 font-medium" : "border-border hover:bg-muted/50"
+                  answer === String(i) ? "border-primary bg-primary/5 font-medium" : "border-border hover:bg-muted/50"
                 )}
               >
                 <span className="font-bold mr-2">{String.fromCharCode(65 + i)}.</span>{opt}
@@ -103,41 +103,40 @@ function QuestionCard({
           />
         )}
 
-        {/* Matching — two-column with dropdown selectors */}
+        {/* Matching — store as JSON string: { leftLabel: rightValue, ... } */}
         {question.question_type === "Matching" && (
           (() => {
             const leftItems: string[] = content.left_items ?? (content.pairs as any[])?.map((p: any) => p.left) ?? [];
             const rightPool: string[] = content.right_items ?? (content.pairs as any[])?.map((p: any) => p.right) ?? [];
-            // Always store as Record<number, string> to preserve index mapping on deselect
-            const selected: Record<number, string> = Array.isArray(answer)
-              ? Object.fromEntries((answer as string[]).map((v, i) => [i, v]))
-              : (answer as any) ?? {};
+            // Parse current answer JSON string back to a display map
+            const selected: Record<string, string> = (() => {
+              try { return answer ? JSON.parse(answer) : {}; } catch { return {}; }
+            })();
 
-            const updateMatch = (leftIdx: number, rightVal: string) => {
+            const updateMatch = (leftLabel: string, rightVal: string) => {
               const next = { ...selected };
-              // Remove any other row that already has this value (uniqueness)
-              Object.keys(next).forEach((k) => { if (next[+k] === rightVal && +k !== leftIdx) delete next[+k]; });
-              if (rightVal) next[leftIdx] = rightVal; else delete next[leftIdx];
-              // Pass as Record to preserve sparse indices (avoids propagation on deselect)
-              // Pass undefined when fully cleared so the question counts as unanswered
-              onChange(Object.keys(next).length ? next as any : undefined);
+              // Remove any other key that already has this value (uniqueness)
+              Object.keys(next).forEach((k) => { if (next[k] === rightVal && k !== leftLabel) delete next[k]; });
+              if (rightVal) next[leftLabel] = rightVal; else delete next[leftLabel];
+              const json = JSON.stringify(next);
+              onChange(Object.keys(next).length ? json : undefined as any);
             };
 
             return (
               <div className="space-y-2">
-                {leftItems.map((left, i) => {
+                {leftItems.map((left) => {
                   const usedValues = Object.entries(selected)
-                    .filter(([k]) => +k !== i)
+                    .filter(([k]) => k !== left)
                     .map(([, v]) => v);
                   return (
-                    <div key={i} className="grid grid-cols-2 gap-3 items-center">
+                    <div key={left} className="grid grid-cols-2 gap-3 items-center">
                       <div className="p-3 rounded-lg bg-muted text-sm font-bold">{left}</div>
                       <select
-                        value={selected[i] ?? ""}
-                        onChange={(e) => updateMatch(i, e.target.value)}
+                        value={selected[left] ?? ""}
+                        onChange={(e) => updateMatch(left, e.target.value)}
                         className={cn(
                           "p-3 rounded-lg border text-sm bg-background focus:outline-none focus:ring-1 focus:ring-primary transition-all",
-                          selected[i] ? "border-primary opacity-50" : "border-border font-bold text-foreground"
+                          selected[left] ? "border-primary opacity-50" : "border-border font-bold text-foreground"
                         )}
                       >
                         <option value="">— Select —</option>
@@ -199,7 +198,7 @@ export default function ExamRoomPage() {
     const res = await api.post("/exam/submit", { exam_id: exam.exam_id, answers });
     setSubmitting(false);
     if (!res.success) { toast.error(res.message); return; }
-    navigate("/exam-history", { state: { result: res.data } });
+    navigate("/exam-result", { state: { result: res.data, questions: exam.questions, examTitle: exam.exam_title } });
   };
 
   return (
