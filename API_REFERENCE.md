@@ -3,7 +3,7 @@
 ## Base URL
 
 ```
-https://questiai-43b71abdd48b.herokuapp.com/api
+http://0.0.0.0:8000/api
 ```
 
 ## Authentication

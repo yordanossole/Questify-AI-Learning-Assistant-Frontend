@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import {
   User,
   Bell,
@@ -14,17 +14,21 @@ import {
   Envelope,
   DeviceMobile,
   Check,
+  CircleNotch,
 } from "@phosphor-icons/react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { cn } from "@/lib/utils";
-import { studentProfile } from "@/data/mockData";
 import { useNavigate } from "react-router-dom";
-import { toast } from "@/components/ui/sonner";
+import { toast } from "sonner";
+import { useGlobalState } from "@/contexts/GlobalStateContext";
+import { useAuth } from "@/contexts/AuthContext";
+import { api } from "@/lib/api";
 
 interface SettingSection {
   id: string;
@@ -45,6 +49,28 @@ const sections: SettingSection[] = [
 export default function Settings() {
   const [activeSection, setActiveSection] = useState("account");
   const navigate = useNavigate();
+  const { signOut } = useAuth();
+  const { profile, profileLoading, updateProfile } = useGlobalState();
+
+  // Account form state — seeded from profile once loaded
+  const [fullName, setFullName] = useState("");
+  const [peakTime, setPeakTime] = useState("");
+  const [savingProfile, setSavingProfile] = useState(false);
+
+  // Sync form when profile loads
+  useEffect(() => {
+    if (profile) {
+      setFullName(profile.full_name);
+      setPeakTime(profile.peak_performance_time ?? "");
+    }
+  }, [profile]);
+
+  // Password form
+  const [oldPassword, setOldPassword] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [savingPassword, setSavingPassword] = useState(false);
+
   const [settings, setSettings] = useState({
     emailNotifications: true,
     pushNotifications: true,
@@ -58,6 +84,33 @@ export default function Settings() {
 
   const updateSetting = (key: string, value: boolean) => {
     setSettings((prev) => ({ ...prev, [key]: value }));
+  };
+
+  const handleSaveProfile = async () => {
+    setSavingProfile(true);
+    await updateProfile({
+      full_name: fullName || undefined,
+      peak_performance_time: peakTime || undefined,
+    });
+    setSavingProfile(false);
+  };
+
+  const handleChangePassword = async () => {
+    if (newPassword.length < 8) { toast.error("New password must be at least 8 characters"); return; }
+    if (newPassword !== confirmPassword) { toast.error("Passwords don't match"); return; }
+    setSavingPassword(true);
+    const res = await api.patch("/auth/user/password", { old_password: oldPassword, new_password: newPassword });
+    setSavingPassword(false);
+    if (!res.success) { toast.error(res.message); return; }
+    toast.success("Password changed");
+    setOldPassword(""); setNewPassword(""); setConfirmPassword("");
+  };
+
+  const handleDeleteAccount = async () => {
+    if (!confirm("Permanently delete your account and all data? This cannot be undone.")) return;
+    const res = await api.delete("/auth/user");
+    if (!res.success) { toast.error(res.message); return; }
+    signOut(); navigate("/");
   };
 
   return (
@@ -97,38 +150,42 @@ export default function Settings() {
                   <CardDescription>Update your personal details</CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-6">
-                  <div className="flex items-center gap-6">
-                    <div className="w-20 h-20 rounded-2xl gradient-primary flex items-center justify-center">
-                      <span className="text-2xl font-bold text-primary-foreground">
-                        {studentProfile.name.split(" ").map((n) => n[0]).join("")}
-                      </span>
-                    </div>
-                    <div>
-                      <Button variant="outline" size="sm" onClick={() => toast.info("Photo upload coming soon!")}>Change Photo</Button>
-                      <p className="text-xs text-muted-foreground mt-1">JPG, PNG up to 5MB</p>
-                    </div>
-                  </div>
-
                   <div className="grid md:grid-cols-2 gap-4">
                     <div className="space-y-2">
                       <Label>Full Name</Label>
-                      <Input defaultValue={studentProfile.name} />
+                      <Input
+                        value={profileLoading ? "" : fullName || profile?.full_name || ""}
+                        onChange={(e) => setFullName(e.target.value)}
+                        placeholder={profileLoading ? "Loading..." : "Your full name"}
+                        disabled={profileLoading}
+                      />
                     </div>
                     <div className="space-y-2">
                       <Label>Email</Label>
-                      <Input defaultValue={studentProfile.email} />
+                      <Input value={profile?.email ?? ""} disabled className="opacity-60" />
                     </div>
-                    <div className="space-y-2">
-                      <Label>Academic Year</Label>
-                      <Input defaultValue={studentProfile.academicYear} />
-                    </div>
-                    <div className="space-y-2">
-                      <Label>University</Label>
-                      <Input placeholder="Enter university name" />
+                    <div className="space-y-2 md:col-span-2">
+                      <Label>Peak Performance Time</Label>
+                      <Select
+                        value={peakTime || profile?.peak_performance_time || ""}
+                        onValueChange={setPeakTime}
+                        disabled={profileLoading}
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder="When do you study best?" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {["morning", "afternoon", "evening", "night"].map((t) => (
+                            <SelectItem key={t} value={t} className="capitalize">{t.charAt(0).toUpperCase() + t.slice(1)}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
                     </div>
                   </div>
-
-                  <Button className="gradient-primary" onClick={() => toast.success("Profile updated successfully!")}>Save Changes</Button>
+                  <Button className="gradient-primary" onClick={handleSaveProfile} disabled={savingProfile || profileLoading}>
+                    {savingProfile ? <CircleNotch className="w-4 h-4 animate-spin mr-2" /> : null}
+                    Save Changes
+                  </Button>
                 </CardContent>
               </Card>
 
@@ -140,19 +197,37 @@ export default function Settings() {
                 <CardContent className="space-y-4">
                   <div className="space-y-2">
                     <Label>Current Password</Label>
-                    <Input type="password" />
+                    <Input type="password" value={oldPassword} onChange={(e) => setOldPassword(e.target.value)} />
                   </div>
                   <div className="grid md:grid-cols-2 gap-4">
                     <div className="space-y-2">
                       <Label>New Password</Label>
-                      <Input type="password" />
+                      <Input type="password" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} />
                     </div>
                     <div className="space-y-2">
                       <Label>Confirm Password</Label>
-                      <Input type="password" />
+                      <Input type="password" value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} />
                     </div>
                   </div>
-                  <Button variant="outline" onClick={() => toast.success("Password updated successfully!")}>Update Password</Button>
+                  <Button variant="outline" onClick={handleChangePassword} disabled={savingPassword || !oldPassword || !newPassword}>
+                    {savingPassword ? <CircleNotch className="w-4 h-4 animate-spin mr-2" /> : null}
+                    Update Password
+                  </Button>
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-destructive">Danger Zone</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="p-4 rounded-xl border border-destructive/20 bg-destructive/5 flex items-center justify-between">
+                    <div>
+                      <p className="font-medium text-sm">Delete Account</p>
+                      <p className="text-xs text-muted-foreground">Permanently delete your account and all data</p>
+                    </div>
+                    <Button variant="destructive" size="sm" onClick={handleDeleteAccount}>Delete</Button>
+                  </div>
                 </CardContent>
               </Card>
             </div>
@@ -398,26 +473,7 @@ export default function Settings() {
                 </CardContent>
               </Card>
 
-              <Card>
-                <CardHeader>
-                  <CardTitle className="text-destructive">Danger Zone</CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  <div className="p-4 rounded-xl border border-destructive/20 bg-destructive/5">
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <p className="font-medium text-sm">Delete Account</p>
-                        <p className="text-xs text-muted-foreground">Permanently delete your account and data</p>
-                      </div>
-                      <Button variant="destructive" size="sm" onClick={() => {
-                        if (confirm("Are you sure you want to delete your account? This action cannot be undone.")) {
-                          toast.error("Account deletion initiated. Contact support to complete.");
-                        }
-                      }}>Delete</Button>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
+
             </div>
           )}
 

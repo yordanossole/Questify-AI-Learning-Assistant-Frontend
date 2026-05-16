@@ -1,4 +1,4 @@
-const BASE_URL = "https://questiai-43b71abdd48b.herokuapp.com/api";
+const BASE_URL = "http://0.0.0.0:8000/api";
 
 export interface ApiResponse<T = null> {
   success: boolean;

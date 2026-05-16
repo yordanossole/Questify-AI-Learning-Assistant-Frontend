@@ -8,8 +8,8 @@ import { cn } from "@/lib/utils";
 import { Bell, MagnifyingGlass, Sun, Moon } from "@phosphor-icons/react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
-import { studentProfile } from "@/data/mockData";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { useGlobalState } from "@/contexts/GlobalStateContext";
 import { Badge } from "@/components/ui/badge";
 import { useTheme } from "next-themes";
 
@@ -26,6 +26,7 @@ export function Layout({ children, showSidebar = true, title }: LayoutProps) {
   const isMobile = useIsMobile();
   const { theme, setTheme } = useTheme();
   const [mounted, setMounted] = useState(false);
+  const { profile, avatarUrl } = useGlobalState();
 
   useEffect(() => {
     setMounted(true);
@@ -104,13 +105,14 @@ export function Layout({ children, showSidebar = true, title }: LayoutProps) {
                 className="flex items-center gap-2 hover:bg-muted/50 p-1 rounded-full transition-colors"
               >
                 <Avatar className="h-8 w-8">
+                  {avatarUrl && <AvatarImage src={avatarUrl} alt="avatar" />}
                   <AvatarFallback className="bg-primary/10 text-primary text-xs font-bold">
-                    {studentProfile.name.split(" ").map((n) => n[0]).join("")}
+                    {profile?.full_name?.split(" ").map((n) => n[0]).join("") ?? "?"}
                   </AvatarFallback>
                 </Avatar>
                 <div className="hidden md:block text-left text-xs">
-                  <p className="font-bold leading-none">{studentProfile.name}</p>
-                  <p className="text-muted-foreground mt-0.5">Premium Student</p>
+                  <p className="font-bold leading-none">{profile?.full_name ?? ""}</p>
+                  <p className="text-muted-foreground mt-0.5">Student</p>
                 </div>
               </button>
             </div>
