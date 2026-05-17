@@ -9,7 +9,7 @@ import { Textarea } from "@/components/ui/textarea";
 // Shared types for the content
 import { MOCK_CHAPTERS } from "@/data/mockChapters";
 
-export function SQ3RMethod({ onBack, chapterId }: { onBack: () => void; bookFilename?: string; chapterId?: string; courseId?: string }) {
+export function SQ3RMethod({ onBack, chapterId, studyData }: { onBack: () => void; bookFilename?: string; chapterId?: string; courseId?: string; collectionId?: string; studyData?: any }) {
     const [step, setStep] = useState<0 | 1 | 2 | 3 | 4>(0);
     const STEPS = [
         { id: 'survey', label: 'Survey', icon: MagnifyingGlass, desc: "Skim headings and summaries." },
@@ -19,10 +19,16 @@ export function SQ3RMethod({ onBack, chapterId }: { onBack: () => void; bookFile
         { id: 'review', label: 'Review', icon: CheckCircle, desc: "Refine your mental model." },
     ];
 
-    // Mock content based on chapterId or default
-    const content = MOCK_CHAPTERS[chapterId || ''] || MOCK_CHAPTERS['Database Normalization'] || {
-        sections: [{ title: 'Introduction', content: '...' }]
-    };
+    // Use real API data if available
+    const apiHeadings: string[] = studyData?.survey?.headings ?? [];
+    const apiQuestions: string[] = studyData?.questions ?? [];
+    const apiRecitePoints: string[] = studyData?.recite_points ?? [];
+    const apiReviewSummary: string = studyData?.review_summary ?? "";
+    const apiKeyTerms: string[] = studyData?.survey?.key_terms ?? [];
+
+    // Fall back to mock chapters only when no API data
+    const mockContent = MOCK_CHAPTERS[chapterId || ''] || MOCK_CHAPTERS['Database Normalization'] || { sections: [{ title: 'Introduction', content: '...' }] };
+    const content = studyData ? null : mockContent;
 
     const handleNext = () => {
         if (step < 4) setStep(prev => (prev + 1) as any);
@@ -74,31 +80,56 @@ export function SQ3RMethod({ onBack, chapterId }: { onBack: () => void; bookFile
                                         <MagnifyingGlass className="w-5 h-5 shrink-0" />
                                         <p>Don't read word-for-word yet. Just scan the titles, bold text, and summaries to build a mental map.</p>
                                     </div>
-                                    <h1 className="text-4xl font-black">{chapterId || "Chapter Title"}</h1>
-                                    {content.sections?.map((sec: any, i: number) => (
-                                        <div key={i} className="py-4 border-b">
-                                            <h2 className="text-2xl font-bold mb-2">{sec.title}</h2>
-                                            <p className="text-muted-foreground line-clamp-2 italic opacity-50">
-                                                {sec.content.substring(0, 150)}...
-                                            </p>
-                                        </div>
-                                    ))}
+                                    {apiHeadings.length > 0 ? (
+                                        <>
+                                            {apiKeyTerms.length > 0 && (
+                                                <div className="flex flex-wrap gap-2 mb-4">
+                                                    {apiKeyTerms.map((t) => <span key={t} className="px-2 py-0.5 rounded-full bg-purple-100 text-purple-700 text-xs font-medium">{t}</span>)}
+                                                </div>
+                                            )}
+                                            {apiHeadings.map((h, i) => (
+                                                <div key={i} className="py-4 border-b">
+                                                    <h2 className="text-2xl font-bold">{h}</h2>
+                                                </div>
+                                            ))}
+                                        </>
+                                    ) : (
+                                        <>
+                                            <h1 className="text-4xl font-black">{chapterId || "Chapter Title"}</h1>
+                                            {content?.sections?.map((sec: any, i: number) => (
+                                                <div key={i} className="py-4 border-b">
+                                                    <h2 className="text-2xl font-bold mb-2">{sec.title}</h2>
+                                                    <p className="text-muted-foreground line-clamp-2 italic opacity-50">{sec.content?.substring(0, 150)}...</p>
+                                                </div>
+                                            ))}
+                                        </>
+                                    )}
                                 </div>
                             )}
 
-                            {/* PHASE: QUESTION (Input fields) */}
+                            {/* PHASE: QUESTION */}
                             {step === 1 && (
                                 <div className="space-y-8 animate-in fade-in">
                                     <div className="bg-blue-50 border border-blue-100 p-4 rounded-lg text-blue-800 text-sm mb-8 flex gap-3">
                                         <Pen className="w-5 h-5 shrink-0" />
                                         <p>Turn the headings into questions. What do you expect to learn from this section?</p>
                                     </div>
-                                    {content.sections?.map((sec: any, i: number) => (
-                                        <div key={i} className="space-y-3">
-                                            <h2 className="text-xl font-bold">{sec.title}</h2>
-                                            <Textarea placeholder={`Write a question about "${sec.title}"...`} className="bg-muted/30" />
-                                        </div>
-                                    ))}
+                                    {apiQuestions.length > 0 ? (
+                                        apiQuestions.map((q, i) => (
+                                            <div key={i} className="space-y-2">
+                                                <p className="font-bold text-sm text-muted-foreground">Q{i + 1}</p>
+                                                <p className="text-base font-medium">{q}</p>
+                                                <Textarea placeholder="Your answer..." className="bg-muted/30" />
+                                            </div>
+                                        ))
+                                    ) : (
+                                        content?.sections?.map((sec: any, i: number) => (
+                                            <div key={i} className="space-y-3">
+                                                <h2 className="text-xl font-bold">{sec.title}</h2>
+                                                <Textarea placeholder={`Write a question about "${sec.title}"...`} className="bg-muted/30" />
+                                            </div>
+                                        ))
+                                    )}
                                 </div>
                             )}
 

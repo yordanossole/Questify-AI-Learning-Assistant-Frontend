@@ -8,8 +8,23 @@ import { Badge } from "@/components/ui/badge";
 import { motion, AnimatePresence } from "framer-motion";
 import { Progress } from "@/components/ui/progress";
 
-export function LeitnerSystem({ onBack }: { onBack: () => void; bookFilename?: string; chapterId?: string; courseId?: string }) {
-    const [cards, setCards] = useState<Flashcard[]>(MOCK_FLASHCARDS);
+interface ApiCard { question: string; answer: string; }
+
+export function LeitnerSystem({ onBack, studyData }: { onBack: () => void; bookFilename?: string; chapterId?: string; courseId?: string; collectionId?: string; studyData?: any }) {
+    // Build cards from API data if available, else fall back to mock
+    const initialCards: Flashcard[] = studyData?.boxes
+        ? studyData.boxes.flatMap((b: any) =>
+            (b.cards ?? []).map((c: ApiCard, i: number) => ({
+                id: `${b.box_number}-${i}`,
+                question: c.question,
+                answer: c.answer,
+                topic: studyData.title ?? "Study",
+                box: b.box_number as 1 | 2 | 3 | 4 | 5,
+            }))
+          )
+        : MOCK_FLASHCARDS;
+
+    const [cards, setCards] = useState<Flashcard[]>(initialCards);
     const [currentBox, setCurrentBox] = useState<number>(1);
     const [activeCardIndex, setActiveCardIndex] = useState(0);
     const [isFlipped, setIsFlipped] = useState(false);
