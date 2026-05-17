@@ -3,7 +3,7 @@
 ## Base URL
 
 ```
-http://0.0.0.0:8000/api
+https://questiai-43b71abdd48b.herokuapp.com/api
 ```
 
 ## Authentication
@@ -1896,17 +1896,7 @@ Interactive chat interface for asking questions and receiving AI-generated answe
 
 ## POST `/api/chat/session` 🔒
 
-Create a new chat session.
-
-**Request Body**
-
-```json
-{
-  "title": "ML Concepts Discussion"
-}
-```
-
-> `title` is optional. If omitted, the session is created with no title.
+Create a new chat session. No request body required. The session title defaults to `"New Chat"` and is automatically renamed after the first question is asked.
 
 **Success `201`**
 
@@ -1916,8 +1906,7 @@ Create a new chat session.
   "message": "Chat session created successfully",
   "data": {
     "session_id": "s1o2m3e4-1234-5678-abcd-ef0123456789",
-    "collection_id": "b1e2d3c4-5678-1234-abcd-ef0123456789",
-    "title": "ML Concepts Discussion",
+    "title": "New Chat",
     "created_at": "2026-01-08T10:00:00"
   }
 }
@@ -1978,7 +1967,6 @@ Get all chat sessions for the authenticated user.
   "data": [
     {
       "session_id": "s1o2m3e4-1234-5678-abcd-ef0123456789",
-      "collection_id": "b1e2d3c4-5678-1234-abcd-ef0123456789",
       "title": "ML Concepts Discussion",
       "created_at": "2026-01-08T10:00:00"
     }
