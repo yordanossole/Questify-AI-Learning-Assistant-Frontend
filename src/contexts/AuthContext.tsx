@@ -7,6 +7,7 @@ interface UserProfile {
   email: string;
   avatar_url: string | null;
   is_verified: boolean;
+  role: "user" | "support" | "super_admin";
   created_at: string;
   updated_at: string;
 }
@@ -49,6 +50,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   function clearAuth() {
     localStorage.removeItem("questify-token");
+    localStorage.removeItem("questify-role");
     setToken(null);
     setUser(null);
   }
@@ -59,7 +61,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }
 
   const signIn = async (email: string, password: string) => {
-    const res = await api.post<{ access_token: string; token_type: string }>(
+    const res = await api.post<{ access_token: string; user: { user_id: string; full_name: string; email: string; role: string } }>(
       "/auth/login",
       { email, password }
     );
@@ -68,7 +70,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       return { error: res.message, unverified };
     }
     saveToken(res.data.access_token);
-    // Fetch profile
+    // Store role for quick access
+    if (res.data.user?.role) {
+      localStorage.setItem("questify-role", res.data.user.role);
+    }
+    // Fetch full profile
     const profile = await api.get<UserProfile>("/auth/user/profile");
     if (profile.success) setUser(profile.data);
     return { error: null };

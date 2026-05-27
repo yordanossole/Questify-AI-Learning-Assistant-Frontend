@@ -1,5 +1,5 @@
 // Axios-compatible client using native fetch — used by authService.ts
-const BASE_URL = "http://0.0.0.0:8000/api";
+const BASE_URL = "https://questiai-43b71abdd48b.herokuapp.com/api";
 
 function getToken() {
   return localStorage.getItem("questify-token") || localStorage.getItem("access_token");

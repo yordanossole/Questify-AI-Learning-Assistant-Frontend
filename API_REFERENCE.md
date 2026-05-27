@@ -28,14 +28,14 @@ All endpoints (except file streaming) return a consistent JSON envelope:
 
 ## Error Codes
 
-| Status | Meaning                                         |
-| ------ | ----------------------------------------------- |
-| 400    | Bad request / validation error                  |
-| 401    | Invalid or missing token                        |
-| 403    | Forbidden (unverified account or access denied) |
-| 404    | Resource not found                              |
-| 409    | Conflict (e.g. email already registered)        |
-| 500    | Internal server error                           |
+| Status | Meaning |
+|--------|---------|
+| 400 | Bad request / validation error |
+| 401 | Invalid or missing token |
+| 403 | Forbidden (unverified account, access denied, or subscription limit reached) |
+| 404 | Resource not found |
+| 409 | Conflict (e.g. email already registered) |
+| 500 | Internal server error |
 
 ---
 
@@ -116,7 +116,7 @@ Verify the user's email using the OTP sent during registration.
 
 ## POST `/api/auth/resend-otp`
 
-Resend the registration OTP to the user's email.
+Resend the registration OTP.
 
 **Request Body**
 
@@ -150,7 +150,7 @@ Resend the registration OTP to the user's email.
 
 ## POST `/api/auth/login`
 
-Authenticate and receive an access token.
+Authenticate and receive an access token with user info.
 
 **Request Body**
 
@@ -166,13 +166,20 @@ Authenticate and receive an access token.
 ```json
 {
   "success": true,
-  "message": "Login successfull",
+  "message": "Login successful",
   "data": {
     "access_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
-    "token_type": "bearer"
+    "user": {
+      "user_id": "81434829-f84b-45a3-9bb6-aefc308440b3",
+      "full_name": "John Doe",
+      "email": "john@example.com",
+      "role": "user"
+    }
   }
 }
 ```
+
+> `role` values: `"user"` | `"support"` | `"super_admin"`
 
 **Error `400`** — wrong credentials
 
@@ -321,6 +328,7 @@ Get the authenticated user's basic profile.
     "email": "john@example.com",
     "avatar_url": "avatars/81434829-avatar",
     "is_verified": true,
+    "role": "user",
     "created_at": "2026-01-01T10:00:00",
     "updated_at": "2026-01-10T12:00:00"
   }
@@ -360,7 +368,7 @@ Get the authenticated user's full profile including study stats.
 
 ## PATCH `/api/auth/user/profile` 🔒
 
-Update the authenticated user's profile. All fields are optional.
+Update the authenticated user's profile. All fields optional.
 
 **Request Body**
 
@@ -377,20 +385,7 @@ Update the authenticated user's profile. All fields are optional.
 {
   "success": true,
   "message": "Profile updated successfully",
-  "data": {
-    "user_id": "81434829-f84b-45a3-9bb6-aefc308440b3",
-    "full_name": "John Updated",
-    "email": "john@example.com",
-    "avatar_url": null,
-    "peak_performance_time": "evening",
-    "total_study_hours": 4.5,
-    "exams_completed": 9,
-    "average_score": 82.3,
-    "current_streak": 3,
-    "longest_streak": 7,
-    "created_at": "2026-01-01T10:00:00",
-    "updated_at": "2026-01-15T09:00:00"
-  }
+  "data": { ...UserProfileResponse... }
 }
 ```
 
@@ -398,10 +393,9 @@ Update the authenticated user's profile. All fields are optional.
 
 ## GET `/api/auth/user/avatar` 🔒
 
-Stream the authenticated user's avatar image file.
+Stream the authenticated user's avatar image.
 
-**Success `200`**
-Returns the raw image binary with the appropriate `Content-Type` header (e.g. `image/jpeg`, `image/png`, `image/webp`).
+**Success `200`** — raw image binary with appropriate `Content-Type` header.
 
 **Error `400`** — no avatar set
 
@@ -420,9 +414,10 @@ Returns the raw image binary with the appropriate `Content-Type` header (e.g. `i
 Upload or replace the authenticated user's avatar.
 
 **Request** — `multipart/form-data`
+
 | Field | Type | Required |
 |-------|------|----------|
-| `file` | image file (JPEG, PNG, WebP) | yes |
+| `file` | image (JPEG, PNG, WebP) | yes |
 
 **Success `200`**
 
@@ -430,15 +425,7 @@ Upload or replace the authenticated user's avatar.
 {
   "success": true,
   "message": "Avatar updated successfully",
-  "data": {
-    "user_id": "81434829-f84b-45a3-9bb6-aefc308440b3",
-    "full_name": "John Doe",
-    "email": "john@example.com",
-    "avatar_url": "avatars/81434829-avatar",
-    "is_verified": true,
-    "created_at": "2026-01-01T10:00:00",
-    "updated_at": "2026-01-15T09:00:00"
-  }
+  "data": { ...UserResponse with role... }
 }
 ```
 
@@ -464,15 +451,7 @@ Remove the authenticated user's avatar.
 {
   "success": true,
   "message": "Avatar removed successfully",
-  "data": {
-    "user_id": "81434829-f84b-45a3-9bb6-aefc308440b3",
-    "full_name": "John Doe",
-    "email": "john@example.com",
-    "avatar_url": null,
-    "is_verified": true,
-    "created_at": "2026-01-01T10:00:00",
-    "updated_at": "2026-01-15T09:00:00"
-  }
+  "data": { ...UserResponse with role... }
 }
 ```
 
@@ -527,6 +506,7 @@ Get all materials uploaded by the authenticated user.
 Get a single material by ID.
 
 **Path Parameter**
+
 | Param | Type | Description |
 |-------|------|-------------|
 | `material_id` | UUID string | ID of the material |
@@ -563,15 +543,15 @@ Get a single material by ID.
 
 ## GET `/api/material/{material_id}/download` 🔒
 
-Download the raw file for a material.
+Download the raw file for a material. Returns binary with `Content-Disposition: attachment` header.
 
 **Path Parameter**
+
 | Param | Type | Description |
 |-------|------|-------------|
 | `material_id` | UUID string | ID of the material |
 
-**Success `200`**
-Returns the raw file binary with `Content-Type` and `Content-Disposition: attachment; filename*=UTF-8''<encoded_name>` headers.
+**Success `200`** — raw file binary with `Content-Type` and `Content-Disposition: attachment; filename*=UTF-8''<encoded_name>` headers.
 
 **Error `403`** — material belongs to another user
 
@@ -587,9 +567,10 @@ Returns the raw file binary with `Content-Type` and `Content-Disposition: attach
 
 ## POST `/api/material/upload` 🔒
 
-Upload a new material file.
+Upload a new material file. Requires an active subscription. Enforces plan limits for material count and file size.
 
 **Request** — `multipart/form-data`
+
 | Field | Type | Required |
 |-------|------|----------|
 | `file` | PDF or supported document | yes |
@@ -622,6 +603,16 @@ Upload a new material file.
 }
 ```
 
+**Error `403`** — plan limit reached
+
+```json
+{
+  "success": false,
+  "message": "Material limit of 3 reached. Upgrade your plan to upload more.",
+  "data": null
+}
+```
+
 ---
 
 ## DELETE `/api/material/{material_id}` 🔒
@@ -629,6 +620,7 @@ Upload a new material file.
 Delete a material and its file from storage.
 
 **Path Parameter**
+
 | Param | Type | Description |
 |-------|------|-------------|
 | `material_id` | UUID string | ID of the material |
@@ -657,20 +649,17 @@ Delete a material and its file from storage.
 
 ## POST `/api/material/preprocess` 🔒
 
-Chunk, embed, and group a list of materials into a collection.
+Chunk, embed, and group a list of materials into a collection. Requires an active subscription.
 
 **Request Body**
 
 ```json
 {
-  "material_ids": [
-    "a3f1c2d4-1234-5678-abcd-ef0123456789",
-    "c4d5e6f7-8901-2345-abcd-ef0123456789"
-  ]
+  "material_ids": ["a3f1c2d4-...", "c4d5e6f7-..."]
 }
 ```
 
-**Success `200`**
+**Success `200`** — returns `CollectionResponse`
 
 ```json
 {
@@ -687,11 +676,17 @@ Chunk, embed, and group a list of materials into a collection.
 }
 ```
 
+**Error `403`** — no active subscription
+
+```json
+{ "success": false, "message": "No active subscription. Please subscribe to a plan.", "data": null }
+```
+
 ---
 
 ## POST `/api/material/analyze` 🔒
 
-Queue an AI analysis job on a collection to extract chapters and metadata. This is an **asynchronous** operation — it returns a job ID immediately. Poll `GET /api/material/analyze/{job_id}/status` for the result.
+Queue an AI analysis job on a collection. Asynchronous — returns a job ID immediately.
 
 > Rate limited to **2 requests per 60 seconds** per user.
 
@@ -710,10 +705,7 @@ Queue an AI analysis job on a collection to extract chapters and metadata. This 
 {
   "success": true,
   "message": "Analysis queued",
-  "data": {
-    "job_id": "a1b2c3d4-e5f6-7890-abcd-ef0123456789",
-    "status": "pending"
-  }
+  "data": { "job_id": "...", "status": "pending" }
 }
 ```
 
@@ -731,9 +723,10 @@ Queue an AI analysis job on a collection to extract chapters and metadata. This 
 
 ## GET `/api/material/analyze/{job_id}/status` 🔒
 
-Poll the status of an analysis job.
+Poll the status of an analysis job. `status` values: `pending` | `done` | `failed`.
 
 **Path Parameter**
+
 | Param | Type | Description |
 |-------|------|-------------|
 | `job_id` | string | Job ID returned by `POST /api/material/analyze` |
@@ -744,10 +737,7 @@ Poll the status of an analysis job.
 {
   "success": true,
   "message": "Job status fetched",
-  "data": {
-    "job_id": "a1b2c3d4-e5f6-7890-abcd-ef0123456789",
-    "status": "pending"
-  }
+  "data": { "job_id": "...", "status": "pending" }
 }
 ```
 
@@ -770,12 +760,6 @@ Poll the status of an analysis job.
           "chapter_title": "Supervised Learning",
           "chapter_description": "Covers regression and classification.",
           "keywords": ["regression", "classification", "labels"]
-        },
-        {
-          "chapter_number": 2,
-          "chapter_title": "Unsupervised Learning",
-          "chapter_description": "Covers clustering and dimensionality reduction.",
-          "keywords": ["clustering", "PCA", "k-means"]
         }
       ]
     }
@@ -790,7 +774,7 @@ Poll the status of an analysis job.
   "success": true,
   "message": "Job status fetched",
   "data": {
-    "job_id": "a1b2c3d4-e5f6-7890-abcd-ef0123456789",
+    "job_id": "...",
     "status": "failed",
     "error": "No chunks found for this collection"
   }
@@ -811,9 +795,10 @@ Poll the status of an analysis job.
 
 ## GET `/api/material/collections/{collection_id}/chapters` 🔒
 
-List all chapters and their metadata for a given collection.
+List all chapters for a collection.
 
 **Path Parameter**
+
 | Param | Type | Description |
 |-------|------|-------------|
 | `collection_id` | UUID | ID of the collection |
@@ -852,8 +837,6 @@ List all chapters and their metadata for a given collection.
 
 # Collections `/api/collections`
 
-Collections organize materials, chapters, and study resources into cohesive units for learning.
-
 ## GET `/api/collections/` 🔒
 
 Get all collections created by the authenticated user.
@@ -884,9 +867,10 @@ Get all collections created by the authenticated user.
 Get a specific collection by ID.
 
 **Path Parameter**
+
 | Param | Type | Description |
 |-------|------|-------------|
-| `collection_id` | UUID | ID of the collection to fetch |
+| `collection_id` | UUID | ID of the collection |
 
 **Success `200`**
 
@@ -932,9 +916,10 @@ Get a specific collection by ID.
 Delete a collection and all its associated data.
 
 **Path Parameter**
+
 | Param | Type | Description |
 |-------|------|-------------|
-| `collection_id` | UUID | ID of the collection to delete |
+| `collection_id` | UUID | ID of the collection |
 
 **Success `200`**
 
@@ -962,7 +947,7 @@ Delete a collection and all its associated data.
 
 ## POST `/api/exam/generate-exam` 🔒
 
-Generate an exam for a collection based on selected chapters and settings.
+Generate an exam for a collection based on selected chapters and settings. Requires an active subscription with `exam_generation_enabled`. Counts against `ai_requests_per_day`.
 
 **Request Body**
 
@@ -1089,19 +1074,26 @@ Submit answers for an exam and receive graded results.
 
 # Notes `/api/notes`
 
-> All note generation endpoints take a `collection_id` and return the generated note. Each note type also exposes a GET by collection and a GET for all notes belonging to the authenticated user.
+> All note generation endpoints require an active subscription. The method must be included in the plan's `note_methods_enabled` feature and counts against `ai_requests_per_day`.
+
+All note endpoints follow the same pattern per method (`cornell`, `sentence`, `boxing`, `outline`, `mind-map`, `charting`):
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| POST | `/api/notes/{method}` 🔒 | Generate note for a collection |
+| GET | `/api/notes/{method}/{collection_id}` 🔒 | Get notes for a collection |
+| GET | `/api/notes/{method}` 🔒 | Get all notes for the user |
+| DELETE | `/api/notes/{method}/{note_id}` 🔒 | Delete a note |
+
+**Generate request body** (all methods):
+
+```json
+{ "collection_id": "b1e2d3c4-..." }
+```
 
 ## POST `/api/notes/cornell` 🔒
 
 Generate a Cornell note for a collection.
-
-**Request Body**
-
-```json
-{
-  "collection_id": "b1e2d3c4-5678-1234-abcd-ef0123456789"
-}
-```
 
 **Success `201`**
 
@@ -1130,30 +1122,13 @@ Generate a Cornell note for a collection.
 
 Get all Cornell notes for a collection.
 
-**Path Parameter**
-| Param | Type | Description |
-|-------|------|-------------|
-| `collection_id` | UUID | ID of the collection |
-
 **Success `200`**
 
 ```json
 {
   "success": true,
   "message": "Cornell notes fetched successfully",
-  "data": [
-    {
-      "note_id": "n1o2t3e4-1234-5678-abcd-ef0123456789",
-      "collection_id": "b1e2d3c4-5678-1234-abcd-ef0123456789",
-      "title": "Supervised Learning Notes",
-      "method": "cornell",
-      "cues": [
-        { "keyword": "Regression", "content": "Predicts continuous values." }
-      ],
-      "summary": "Supervised learning uses labeled data to train models.",
-      "created_at": "2026-01-06T11:00:00"
-    }
-  ]
+  "data": [ ...CornellNoteResponse... ]
 }
 ```
 
@@ -1179,11 +1154,6 @@ Get all Cornell notes for the authenticated user across all collections.
 
 Delete a Cornell note by ID.
 
-**Path Parameter**
-| Param | Type | Description |
-|-------|------|-------------|
-| `note_id` | UUID | ID of the note to delete |
-
 **Success `200`**
 
 ```json
@@ -1199,14 +1169,6 @@ Delete a Cornell note by ID.
 ## POST `/api/notes/sentence` 🔒
 
 Generate a Sentence note for a collection.
-
-**Request Body**
-
-```json
-{
-  "collection_id": "b1e2d3c4-5678-1234-abcd-ef0123456789"
-}
-```
 
 **Success `201`**
 
@@ -1234,31 +1196,11 @@ Generate a Sentence note for a collection.
 
 Get all Sentence notes for a collection.
 
-**Success `200`**
-
-```json
-{
-  "success": true,
-  "message": "Sentence notes fetched successfully",
-  "data": [ ]
-}
-```
-
 ---
 
 ## GET `/api/notes/sentence` 🔒
 
 Get all Sentence notes for the authenticated user.
-
-**Success `200`**
-
-```json
-{
-  "success": true,
-  "message": "Sentence notes fetched successfully",
-  "data": [ ]
-}
-```
 
 ---
 
@@ -1266,29 +1208,11 @@ Get all Sentence notes for the authenticated user.
 
 Delete a Sentence note by ID.
 
-**Success `200`**
-
-```json
-{
-  "success": true,
-  "message": "Sentence note deleted successfully",
-  "data": null
-}
-```
-
 ---
 
 ## POST `/api/notes/boxing` 🔒
 
 Generate a Boxing note for a collection.
-
-**Request Body**
-
-```json
-{
-  "collection_id": "b1e2d3c4-5678-1234-abcd-ef0123456789"
-}
-```
 
 **Success `201`**
 
@@ -1318,31 +1242,11 @@ Generate a Boxing note for a collection.
 
 Get all Boxing notes for a collection.
 
-**Success `200`**
-
-```json
-{
-  "success": true,
-  "message": "Boxing notes fetched successfully",
-  "data": [ ]
-}
-```
-
 ---
 
 ## GET `/api/notes/boxing` 🔒
 
 Get all Boxing notes for the authenticated user.
-
-**Success `200`**
-
-```json
-{
-  "success": true,
-  "message": "Boxing notes fetched successfully",
-  "data": [ ]
-}
-```
 
 ---
 
@@ -1350,29 +1254,11 @@ Get all Boxing notes for the authenticated user.
 
 Delete a Boxing note by ID.
 
-**Success `200`**
-
-```json
-{
-  "success": true,
-  "message": "Boxing note deleted successfully",
-  "data": null
-}
-```
-
 ---
 
 ## POST `/api/notes/outline` 🔒
 
 Generate an Outline note for a collection.
-
-**Request Body**
-
-```json
-{
-  "collection_id": "b1e2d3c4-5678-1234-abcd-ef0123456789"
-}
-```
 
 **Success `201`**
 
@@ -1402,31 +1288,11 @@ Generate an Outline note for a collection.
 
 Get all Outline notes for a collection.
 
-**Success `200`**
-
-```json
-{
-  "success": true,
-  "message": "Outline notes fetched successfully",
-  "data": [ ]
-}
-```
-
 ---
 
 ## GET `/api/notes/outline` 🔒
 
 Get all Outline notes for the authenticated user.
-
-**Success `200`**
-
-```json
-{
-  "success": true,
-  "message": "Outline notes fetched successfully",
-  "data": [ ]
-}
-```
 
 ---
 
@@ -1434,29 +1300,11 @@ Get all Outline notes for the authenticated user.
 
 Delete an Outline note by ID.
 
-**Success `200`**
-
-```json
-{
-  "success": true,
-  "message": "Outline note deleted successfully",
-  "data": null
-}
-```
-
 ---
 
 ## POST `/api/notes/mind-map` 🔒
 
 Generate a Mind Map note for a collection.
-
-**Request Body**
-
-```json
-{
-  "collection_id": "b1e2d3c4-5678-1234-abcd-ef0123456789"
-}
-```
 
 **Success `201`**
 
@@ -1491,31 +1339,11 @@ Generate a Mind Map note for a collection.
 
 Get all Mind Map notes for a collection.
 
-**Success `200`**
-
-```json
-{
-  "success": true,
-  "message": "Mind map notes fetched successfully",
-  "data": [ ]
-}
-```
-
 ---
 
 ## GET `/api/notes/mind-map` 🔒
 
 Get all Mind Map notes for the authenticated user.
-
-**Success `200`**
-
-```json
-{
-  "success": true,
-  "message": "Mind map notes fetched successfully",
-  "data": [ ]
-}
-```
 
 ---
 
@@ -1523,29 +1351,11 @@ Get all Mind Map notes for the authenticated user.
 
 Delete a Mind Map note by ID.
 
-**Success `200`**
-
-```json
-{
-  "success": true,
-  "message": "Mind map note deleted successfully",
-  "data": null
-}
-```
-
 ---
 
 ## POST `/api/notes/charting` 🔒
 
 Generate a Charting note for a collection.
-
-**Request Body**
-
-```json
-{
-  "collection_id": "b1e2d3c4-5678-1234-abcd-ef0123456789"
-}
-```
 
 **Success `201`**
 
@@ -1574,31 +1384,11 @@ Generate a Charting note for a collection.
 
 Get all Charting notes for a collection.
 
-**Success `200`**
-
-```json
-{
-  "success": true,
-  "message": "Charting notes fetched successfully",
-  "data": [ ]
-}
-```
-
 ---
 
 ## GET `/api/notes/charting` 🔒
 
 Get all Charting notes for the authenticated user.
-
-**Success `200`**
-
-```json
-{
-  "success": true,
-  "message": "Charting notes fetched successfully",
-  "data": [ ]
-}
-```
 
 ---
 
@@ -1606,33 +1396,28 @@ Get all Charting notes for the authenticated user.
 
 Delete a Charting note by ID.
 
-**Success `200`**
-
-```json
-{
-  "success": true,
-  "message": "Charting note deleted successfully",
-  "data": null
-}
-```
-
 ---
 
 # Study Methods `/api/study`
 
-> All study method endpoints take a `collection_id` and return the generated plan or session.
+> All study generation endpoints require an active subscription and count against `ai_requests_per_day`.
+
+All study endpoints follow the same pattern (`pomodoro`, `feynman`, `leitner`, `sq3r`, `active-recall`):
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| POST | `/api/study/{method}` 🔒 | Generate plan for a collection |
+| GET | `/api/study/{method}/{collection_id}` 🔒 | Get plans for a collection |
+
+**Generate request body** (all methods):
+
+```json
+{ "collection_id": "b1e2d3c4-..." }
+```
 
 ## POST `/api/study/pomodoro` 🔒
 
 Generate a Pomodoro focus plan for a collection.
-
-**Request Body**
-
-```json
-{
-  "collection_id": "b1e2d3c4-5678-1234-abcd-ef0123456789"
-}
-```
 
 **Success `201`**
 
@@ -1679,14 +1464,6 @@ Get all Pomodoro plans for a collection.
 
 Generate a Feynman explanation for a collection.
 
-**Request Body**
-
-```json
-{
-  "collection_id": "b1e2d3c4-5678-1234-abcd-ef0123456789"
-}
-```
-
 **Success `201`**
 
 ```json
@@ -1716,29 +1493,11 @@ Generate a Feynman explanation for a collection.
 
 Get all Feynman explanations for a collection.
 
-**Success `200`**
-
-```json
-{
-  "success": true,
-  "message": "Feynman explanations fetched successfully",
-  "data": [ ]
-}
-```
-
 ---
 
 ## POST `/api/study/leitner` 🔒
 
 Generate a Leitner System (spaced repetition flashcards) for a collection.
-
-**Request Body**
-
-```json
-{
-  "collection_id": "b1e2d3c4-5678-1234-abcd-ef0123456789"
-}
-```
 
 **Success `201`**
 
@@ -1772,29 +1531,11 @@ Generate a Leitner System (spaced repetition flashcards) for a collection.
 
 Get all Leitner systems for a collection.
 
-**Success `200`**
-
-```json
-{
-  "success": true,
-  "message": "Leitner systems fetched successfully",
-  "data": [ ]
-}
-```
-
 ---
 
 ## POST `/api/study/sq3r` 🔒
 
 Generate an SQ3R guide for a collection.
-
-**Request Body**
-
-```json
-{
-  "collection_id": "b1e2d3c4-5678-1234-abcd-ef0123456789"
-}
-```
 
 **Success `201`**
 
@@ -1827,29 +1568,11 @@ Generate an SQ3R guide for a collection.
 
 Get all SQ3R guides for a collection.
 
-**Success `200`**
-
-```json
-{
-  "success": true,
-  "message": "SQ3R guides fetched successfully",
-  "data": [ ]
-}
-```
-
 ---
 
 ## POST `/api/study/active-recall` 🔒
 
 Generate an Active Recall session for a collection.
-
-**Request Body**
-
-```json
-{
-  "collection_id": "b1e2d3c4-5678-1234-abcd-ef0123456789"
-}
-```
 
 **Success `201`**
 
@@ -1878,25 +1601,13 @@ Generate an Active Recall session for a collection.
 
 Get all Active Recall sessions for a collection.
 
-**Success `200`**
-
-```json
-{
-  "success": true,
-  "message": "Active recall sessions fetched successfully",
-  "data": [ ]
-}
-```
-
 ---
 
 # Chat `/api/chat`
 
-Interactive chat interface for asking questions and receiving AI-generated answers within a session.
-
 ## POST `/api/chat/session` 🔒
 
-Create a new chat session. No request body required. The session title defaults to `"New Chat"` and is automatically renamed after the first question is asked.
+Create a new chat session. No request body required.
 
 **Success `201`**
 
@@ -1916,7 +1627,7 @@ Create a new chat session. No request body required. The session title defaults 
 
 ## POST `/api/chat/ask` 🔒
 
-Ask a question and get an AI-generated answer. Optionally continue an existing session.
+Ask a question and get an AI-generated answer. Requires an active subscription with `chat_enabled`. Counts against `ai_requests_per_day`.
 
 **Request Body**
 
@@ -1927,7 +1638,7 @@ Ask a question and get an AI-generated answer. Optionally continue an existing s
 }
 ```
 
-> `session_id` is optional. If omitted, a new session is created automatically. If provided, the question is appended to the existing session.
+> `session_id` is optional. If omitted, a new session is created automatically.
 
 **Success `201`**
 
@@ -1939,16 +1650,6 @@ Ask a question and get an AI-generated answer. Optionally continue an existing s
     "session_id": "s1o2m3e4-1234-5678-abcd-ef0123456789",
     "answer": "Overfitting occurs when a model learns the training data too well..."
   }
-}
-```
-
-**Error `400`** — missing parameters
-
-```json
-{
-  "success": false,
-  "message": "Collection not found",
-  "data": null
 }
 ```
 
@@ -1981,6 +1682,7 @@ Get all chat sessions for the authenticated user.
 Get all messages in a specific chat session.
 
 **Path Parameter**
+
 | Param | Type | Description |
 |-------|------|-------------|
 | `session_id` | UUID | ID of the chat session |
@@ -2025,5 +1727,425 @@ Get all messages in a specific chat session.
   "success": false,
   "message": "Access denied",
   "data": null
+}
+```
+
+---
+
+# Subscriptions `/api/subscriptions`
+
+## GET `/api/subscriptions/plans`
+
+List all active usage plans (public — no auth required).
+
+**Success `200`**
+
+```json
+{
+  "success": true,
+  "message": "Plans fetched successfully",
+  "data": [
+    {
+      "plan_id": "b2c3d4e5-1234-5678-abcd-ef0123456789",
+      "name": "Free",
+      "description": "Basic plan with limited features",
+      "price": 0.0,
+      "billing_cycle": "monthly",
+      "trial_days": 0,
+      "is_active": true,
+      "features": [
+        {
+          "feature_id": "f1e2a3t4-1234-5678-abcd-ef0123456789",
+          "feature_key": "material_limit",
+          "feature_value": { "limit": 3 }
+        }
+      ],
+      "created_at": "2026-01-01T00:00:00"
+    }
+  ]
+}
+```
+
+---
+
+## GET `/api/subscriptions/my` 🔒
+
+Get the authenticated user's subscription history.
+
+**Success `200`**
+
+```json
+{
+  "success": true,
+  "message": "Subscriptions fetched successfully",
+  "data": [
+    {
+      "subscription_id": "s1u2b3s4-1234-5678-abcd-ef0123456789",
+      "plan_id": "b2c3d4e5-1234-5678-abcd-ef0123456789",
+      "status": "active",
+      "started_at": "2026-01-15T10:00:00",
+      "expires_at": "2026-02-15T10:00:00"
+    }
+  ]
+}
+```
+
+> `status` values: `active` | `expired` | `cancelled` | `pending`
+
+---
+
+# Payments `/api/payments`
+
+## POST `/api/payments/initiate` 🔒
+
+Initiate a payment for a subscription plan via Telebirr.
+
+**Request Body**
+
+```json
+{
+  "plan_id": "b2c3d4e5-..."
+}
+```
+
+**Success `200`**
+
+```json
+{
+  "success": true,
+  "message": "Payment initiated",
+  "data": {
+    "transaction_id": "e5f6a7b8-...",
+    "pay_url": "https://app.ethiomobilemoney.et:2121/..."
+  }
+}
+```
+
+---
+
+## POST `/api/payments/webhook`
+
+Telebirr async callback endpoint. Called by the payment provider — not intended for client use. Returns a plain `200 OK`.
+
+---
+
+## GET `/api/payments/history` 🔒
+
+Get the authenticated user's payment transaction history.
+
+**Success `200`**
+
+```json
+{
+  "success": true,
+  "message": "Payment history fetched",
+  "data": [
+    {
+      "transaction_id": "e5f6a7b8-1234-5678-abcd-ef0123456789",
+      "plan_id": "b2c3d4e5-1234-5678-abcd-ef0123456789",
+      "amount": 29.99,
+      "currency": "ETB",
+      "status": "completed",
+      "provider_trade_no": "TNR-123456789",
+      "provider_reference": "REF-ABCDEF",
+      "created_at": "2026-01-15T10:00:00"
+    }
+  ]
+}
+```
+
+> `status` values: `pending` | `completed` | `failed`
+
+---
+
+# Admin `/api/admin`
+
+> All admin endpoints require authentication with `support` or `super_admin` role. Plan management endpoints additionally require `super_admin`.
+
+## Plan Management (super_admin only)
+
+### GET `/api/admin/plans` 🔒
+
+List all plans (including inactive ones).
+
+**Success `200`**
+
+```json
+{
+  "success": true,
+  "message": "Plans fetched successfully",
+  "data": [ ...UsagePlanResponse... ]
+}
+```
+
+---
+
+### POST `/api/admin/plans` 🔒
+
+Create a new usage plan.
+
+**Request Body**
+
+```json
+{
+  "name": "Premium",
+  "description": "Premium plan with full access",
+  "price": 29.99,
+  "billing_cycle": "monthly",
+  "trial_days": 7,
+  "is_active": true,
+  "features": [
+    {
+      "feature_key": "material_limit",
+      "feature_value": { "limit": 50 }
+    }
+  ]
+}
+```
+
+> `billing_cycle`: `"monthly"` | `"yearly"`
+> `features` is a list of `PlanFeatureRequest` objects.
+
+**Success `200`**
+
+```json
+{
+  "success": true,
+  "message": "Plan created successfully",
+  "data": { ...UsagePlanResponse... }
+}
+```
+
+---
+
+### PATCH `/api/admin/plans/{plan_id}` 🔒
+
+Update an existing plan. All fields optional.
+
+**Request Body**
+
+```json
+{
+  "price": 19.99,
+  "is_active": false
+}
+```
+
+**Success `200`**
+
+```json
+{
+  "success": true,
+  "message": "Plan updated successfully",
+  "data": { ...UsagePlanResponse... }
+}
+```
+
+---
+
+### DELETE `/api/admin/plans/{plan_id}` 🔒
+
+Delete a plan.
+
+**Success `200`**
+
+```json
+{
+  "success": true,
+  "message": "Plan deleted successfully",
+  "data": null
+}
+```
+
+---
+
+## Subscription Management (any admin)
+
+### POST `/api/admin/subscriptions/assign` 🔒
+
+Manually assign a plan to a user.
+
+**Request Body**
+
+```json
+{
+  "user_id": "81434829-f84b-45a3-9bb6-aefc308440b3",
+  "plan_id": "b2c3d4e5-1234-5678-abcd-ef0123456789",
+  "status": "active"
+}
+```
+
+> `status` defaults to `"active"`.
+
+**Success `200`**
+
+```json
+{
+  "success": true,
+  "message": "Plan assigned successfully",
+  "data": { ...SubscriptionResponse... }
+}
+```
+
+---
+
+## User Management (any admin)
+
+### GET `/api/admin/users` 🔒
+
+List all users with pagination.
+
+**Query Parameters**
+
+| Param | Type | Default | Description |
+|-------|------|---------|-------------|
+| `skip` | int | 0 | Number of records to skip |
+| `limit` | int | 50 | Max records to return (max 200) |
+
+**Success `200`**
+
+```json
+{
+  "success": true,
+  "message": "Users fetched successfully",
+  "data": [
+    {
+      "user_id": "81434829-f84b-45a3-9bb6-aefc308440b3",
+      "full_name": "John Doe",
+      "email": "john@example.com",
+      "is_verified": true,
+      "is_deleted": false,
+      "role": "user",
+      "avatar_url": null,
+      "created_at": "2026-01-01T10:00:00",
+      "updated_at": "2026-01-10T12:00:00"
+    }
+  ]
+}
+```
+
+---
+
+### GET `/api/admin/users/{user_id}` 🔒
+
+Get a single user's details.
+
+**Success `200`**
+
+```json
+{
+  "success": true,
+  "message": "User fetched successfully",
+  "data": { ...AdminUserDetailResponse... }
+}
+```
+
+---
+
+## Read-Only Subscriptions (any admin)
+
+### GET `/api/admin/subscriptions` 🔒
+
+List all subscriptions across all users with pagination.
+
+**Query Parameters**
+
+| Param | Type | Default | Description |
+|-------|------|---------|-------------|
+| `skip` | int | 0 | Number of records to skip |
+| `limit` | int | 50 | Max records to return (max 200) |
+
+**Success `200`**
+
+```json
+{
+  "success": true,
+  "message": "Subscriptions fetched successfully",
+  "data": [
+    {
+      "subscription_id": "s1u2b3s4-1234-5678-abcd-ef0123456789",
+      "user_id": "81434829-f84b-45a3-9bb6-aefc308440b3",
+      "plan_id": "b2c3d4e5-1234-5678-abcd-ef0123456789",
+      "status": "active",
+      "started_at": "2026-01-15T10:00:00",
+      "expires_at": "2026-02-15T10:00:00",
+      "payment_reference": "REF-ABCDEF"
+    }
+  ]
+}
+```
+
+---
+
+## Read-Only Transactions (any admin)
+
+### GET `/api/admin/transactions` 🔒
+
+List all payment transactions with pagination.
+
+**Query Parameters**
+
+| Param | Type | Default | Description |
+|-------|------|---------|-------------|
+| `skip` | int | 0 | Number of records to skip |
+| `limit` | int | 50 | Max records to return (max 200) |
+
+**Success `200`**
+
+```json
+{
+  "success": true,
+  "message": "Transactions fetched successfully",
+  "data": [
+    {
+      "transaction_id": "e5f6a7b8-1234-5678-abcd-ef0123456789",
+      "user_id": "81434829-f84b-45a3-9bb6-aefc308440b3",
+      "plan_id": "b2c3d4e5-1234-5678-abcd-ef0123456789",
+      "amount": 29.99,
+      "currency": "ETB",
+      "status": "completed",
+      "provider_trade_no": "TNR-123456789",
+      "provider_reference": "REF-ABCDEF",
+      "created_at": "2026-01-15T10:00:00"
+    }
+  ]
+}
+```
+
+---
+
+## Role Management (super_admin only)
+
+### POST `/api/admin/promote` 🔒
+
+Promote a user to `support` or `super_admin` role.
+
+**Request Body**
+
+```json
+{
+  "user_id": "81434829-f84b-45a3-9bb6-aefc308440b3",
+  "role": "support"
+}
+```
+
+> `role` defaults to `"support"`.
+
+**Success `200`**
+
+```json
+{
+  "success": true,
+  "message": "User role updated",
+  "data": {
+    "user_id": "81434829-f84b-45a3-9bb6-aefc308440b3",
+    "full_name": "John Doe",
+    "email": "john@example.com",
+    "avatar_url": null,
+    "is_verified": true,
+    "role": "support",
+    "created_at": "2026-01-01T10:00:00",
+    "updated_at": "2026-01-20T10:00:00"
+  }
 }
 ```
