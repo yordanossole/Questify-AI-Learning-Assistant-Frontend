@@ -6,6 +6,7 @@ export interface Collection {
   title: string;
   description: string;
   confidence: number;
+  icon?: string;
   created_at: string;
 }
 
@@ -14,5 +15,10 @@ export const collectionsService = {
     const res = await api.get<Collection[]>("/collections/");
     if (!res.success) throw new Error(res.message);
     return res.data;
+  },
+
+  deleteCollection: async (id: string): Promise<void> => {
+    const res = await api.delete(`/collections/${id}`);
+    if (!res.success) throw new Error(res.message);
   },
 };
